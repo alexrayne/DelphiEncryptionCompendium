@@ -41,7 +41,7 @@
       <Filename Value="$Path($(ProjFile))\DECTest"/>
     </Target>
     <SearchPaths>
-      <IncludeFiles Value="..;$(ProjOutDir)"/>
+      <IncludeFiles Value="..\$(TargetCPU);..;$(ProjOutDir)"/>
       <Libraries Value=".."/>
       <OtherUnitFiles Value=".."/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>

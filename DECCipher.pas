@@ -524,6 +524,8 @@ resourcestring
 var
   FDefaultCipherClass: TDECCipherClass = nil;
 
+{$I DECCipher.inc}
+
 function ValidCipher(CipherClass: TDECCipherClass): TDECCipherClass;
 begin
   if CipherClass <> nil then Result := CipherClass
@@ -1329,10 +1331,6 @@ end;
 
 // .TCipher_Blowfish
 
-{$IFDEF UseASM86}
-  {$DEFINE Blowfish_asm}
-{$ENDIF}
-
 type
   PBlowfish = ^TBlowfish;
   TBlowfish = array[0..3, 0..255] of LongWord;
@@ -1389,156 +1387,6 @@ begin
 end;
 {$IFDEF FPC}{$pop}{$ENDIF}
 
-procedure TCipher_Blowfish.DoEncode(Source, Dest: Pointer; Size: Integer);
-{$IFDEF Blowfish_asm}  // specialy for CPU >= 486
-// Source = EDX, Dest=ECX, Size on Stack
-asm
-        PUSH   EDI
-        PUSH   ESI
-        PUSH   EBX
-        PUSH   EBP
-        PUSH   ECX
-        MOV    ESI,[EAX].TCipher_Blowfish.FUser
-        MOV    EBX,[EDX + 0]     // A
-        MOV    EBP,[EDX + 4]     // B
-        BSWAP  EBX               // CPU >= 486
-        BSWAP  EBP
-        XOR    EBX,[ESI + 4 * 256 * 4]
-        XOR    EDI,EDI
-@@1:    MOV    EAX,EBX
-        SHR    EBX,16
-        MOVZX  ECX,BH
-        AND    EBX,0FFh
-        MOV    ECX,[ESI + ECX * 4 + 1024 * 0]
-        MOV    EBX,[ESI + EBX * 4 + 1024 * 1]
-        MOVZX  EDX,AH
-        ADD    EBX,ECX
-        MOVZX  ECX,AL
-        MOV    EDX,[ESI + EDX * 4 + 1024 * 2]
-        MOV    ECX,[ESI + ECX * 4 + 1024 * 3]
-        XOR    EBX,EDX
-        XOR    EBP,[ESI + 4 * 256 * 4 + 4 + EDI * 4]
-        ADD    EBX,ECX
-        INC    EDI
-        XOR    EBX,EBP
-        TEST   EDI,010h
-        MOV    EBP,EAX
-        JZ     @@1
-        POP    EAX
-        XOR    EBP,[ESI + 4 * 256 * 4 + 17 * 4]
-        BSWAP  EBX
-        BSWAP  EBP
-        MOV    [EAX + 4],EBX
-        MOV    [EAX + 0],EBP
-        POP    EBP
-        POP    EBX
-        POP    ESI
-        POP    EDI
-end;
-{$ELSE}
-var
-  I,A,B: LongWord;
-  P: PLongArray;
-  D: PBlowfish;
-begin
-  Assert(Size = Context.BlockSize);
-
-  D := FUser;
-  P := Pointer(PAnsiChar(FUser) + SizeOf(Blowfish_Data));
-  A := {$IFNDEF ENDIAN_BIG}SwapLong(PLongArray(Source)[0]){$ELSE}PLongArray(Source)[0]{$ENDIF} xor P[0];
-  P := @P[1];
-  B := {$IFNDEF ENDIAN_BIG}SwapLong(PLongArray(Source)[1]){$ELSE}PLongArray(Source)[1]{$ENDIF};
-  for I := 0 to 7 do
-  begin
-    B := B xor P[0] xor (D[0, A shr 24        ] +
-                         D[1, A shr 16 and $FF] xor
-                         D[2, A shr  8 and $FF] +
-                         D[3, A        and $FF]);
-
-    A := A xor P[1] xor (D[0, B shr 24        ] +
-                         D[1, B shr 16 and $FF] xor
-                         D[2, B shr  8 and $FF] +
-                         D[3, B        and $FF]);
-    P := @P[2];
-  end;
-  PLongArray(Dest)[0] := {$IFNDEF ENDIAN_BIG}SwapLong(B xor P[0]){$ELSE}B xor P[0]{$ENDIF};
-  PLongArray(Dest)[1] := {$IFNDEF ENDIAN_BIG}SwapLong(A){$ELSE}A{$ENDIF};
-end;
-{$ENDIF}
-
-procedure TCipher_Blowfish.DoDecode(Source, Dest: Pointer; Size: Integer);
-{$IFDEF Blowfish_asm}
-asm
-        PUSH   EDI
-        PUSH   ESI
-        PUSH   EBX
-        PUSH   EBP
-        PUSH   ECX
-        MOV    ESI,[EAX].TCipher_Blowfish.FUser
-        MOV    EBX,[EDX + 0]     // A
-        MOV    EBP,[EDX + 4]     // B
-        BSWAP  EBX
-        BSWAP  EBP
-        XOR    EBX,[ESI + 4 * 256 * 4 + 17 * 4]
-        MOV    EDI,16
-@@1:    MOV    EAX,EBX
-        SHR    EBX,16
-        MOVZX  ECX,BH
-        MOVZX  EDX,BL
-        MOV    EBX,[ESI + ECX * 4 + 1024 * 0]
-        MOV    EDX,[ESI + EDX * 4 + 1024 * 1]
-        MOVZX  ECX,AH
-        LEA    EBX,[EBX + EDX]
-        MOVZX  EDX,AL
-        MOV    ECX,[ESI + ECX * 4 + 1024 * 2]
-        MOV    EDX,[ESI + EDX * 4 + 1024 * 3]
-        XOR    EBX,ECX
-        XOR    EBP,[ESI + 4 * 256 * 4 + EDI * 4]
-        LEA    EBX,[EBX + EDX]
-        XOR    EBX,EBP
-        DEC    EDI
-        MOV    EBP,EAX
-        JNZ    @@1
-        POP    EAX
-        XOR    EBP,[ESI + 4 * 256 * 4]
-        BSWAP  EBX
-        BSWAP  EBP
-        MOV    [EAX + 0],EBP
-        MOV    [EAX + 4],EBX
-        POP    EBP
-        POP    EBX
-        POP    ESI
-        POP    EDI
-end;
-{$ELSE}
-var
-  I,A,B: LongWord;
-  P: PLongArray;
-  D: PBlowfish;
-begin
-  Assert(Size = Context.BlockSize);
-
-  D := FUser;
-  P := Pointer(PAnsiChar(FUser) + SizeOf(Blowfish_Data) + SizeOf(Blowfish_Key) - SizeOf(Integer));
-  A := {$IFNDEF ENDIAN_BIG}SwapLong(PLongArray(Source)[0]){$ELSE}PLongArray(Source)[0]{$ENDIF} xor P[0];
-  B := {$IFNDEF ENDIAN_BIG}SwapLong(PLongArray(Source)[1]){$ELSE}PLongArray(Source)[1]{$ENDIF};
-  for I := 0 to 7 do
-  begin
-    Dec(PLongWord(P), 2);
-    B := B xor P[1] xor (D[0, A shr 24        ] +
-                         D[1, A shr 16 and $FF] xor
-                         D[2, A shr  8 and $FF] +
-                         D[3, A        and $FF]);
-    A := A xor P[0] xor (D[0, B shr 24        ] +
-                         D[1, B shr 16 and $FF] xor
-                         D[2, B shr  8 and $FF] +
-                         D[3, B        and $FF]);
-  end;
-  Dec(PLongWord(P));
-  PLongArray(Dest)[0] := {$IFNDEF ENDIAN_BIG}SwapLong(B xor P[0]){$ELSE}B xor P[0]{$ENDIF};
-  PLongArray(Dest)[1] := {$IFNDEF ENDIAN_BIG}SwapLong(A){$ELSE}A{$ENDIF};
-end;
-{$ENDIF}
 
 // .TCipher_Twofish
 type
@@ -1942,42 +1790,6 @@ begin
   D[2] := D[1];
   D[1] := A;
 end;
-
-function IDEAMul(X,Y: LongWord): LongWord;
-{$IFDEF CPU386}
-asm
-       AND    EAX,0FFFFh
-       JZ     @@1
-       AND    EDX,0FFFFh
-       JZ     @@1
-       MUL    EDX
-       MOV    EDX,EAX
-       MOV    ECX,EAX
-       SHR    EDX,16
-       SUB    EAX,EDX
-       SUB    CX,AX
-       ADC    EAX,0
-       RET
-@@1:   LEA    EAX,[EAX + EDX -1]
-       NEG    EAX
-end;
-{$ELSE}
-begin
-  X := Word(X);
-  Y := Word(Y);
-  if (X <> 0) and (Y <> 0) then
-  begin
-    //Result := (X * Y) mod $10001;
-    // Ugly but up to 30 cycles faster under -O2
-    X := X * Y;
-    Result := X - (X shr 16);
-    if Word(X) < Word(Result) then
-      Inc(Result);
-  end
-  else
-    Result := 1 - X - Y;
-end;
-{$ENDIF}
 
 procedure IDEACipher(Source, Dest: PLongArray; Key: PWordArray);
 var
@@ -2812,177 +2624,6 @@ begin
 end;
 {$IFDEF FPC}{$pop}{$ENDIF}
 
-procedure TCipher_RC6.DoEncode(Source, Dest: Pointer; Size: Integer);
-{$IFDEF UseASM86}
-asm
-      PUSH  EBX
-      PUSH  ESI
-      PUSH  EDI
-      PUSH  EBP
-      PUSH  ECX
-      MOV   EBP,[EAX].TCipher_RC6.FRounds  // Rounds
-      MOV   ESI,[EAX].TCipher_RC6.FUser    // Key
-      MOV   EAX,[EDX +  0]   // A
-      MOV   EBX,[EDX +  4]   // B
-      MOV   EDI,[EDX +  8]   // C
-      MOV   EDX,[EDX + 12]   // D
-      ADD   EBX,[ESI + 0]    // Inc(B, K[0])
-      ADD   EDX,[ESI + 4]    // Inc(D, K[1])
-      ADD   ESI,8            // Inc(PInteger(K), 2)
-@@1:  LEA   ECX,[EBX * 2 +1] // ECX := B * 2 +1
-      IMUL  ECX,EBX          // ECX := ECX * B
-      ROL   ECX,5            // T := ROL(B * (B * 2 +1), 5)
-      PUSH  ECX              // save T
-      XOR   EAX,ECX          // A := A xor T
-      LEA   ECX,[EDX * 2 +1] // ECX := D * 2 +1
-      IMUL  ECX,EDX          // ECX := ECX * D
-      ROL   ECX,5            // U := ROL(D * (D * 2 +1), 5)
-      XOR   EDI,ECX          // C := C xor U
-      ROL   EAX,CL           // A := ROL(A xor T, U)
-      POP   ECX              // restore T
-      ADD   EAX,[ESI + 0]    // Inc(A, K[0])
-      ROL   EDI,CL           // C := ROL(C xor U, T)
-      MOV   ECX,EAX          // T := A
-      ADD   EDI,[ESI + 4]    // Inc(C, K[1])
-      MOV   EAX,EBX          // A := B
-      MOV   EBX,EDI          // B := C
-      MOV   EDI,EDX          // C := D
-      DEC   EBP
-      MOV   EDX,ECX          // D := T;
-      LEA   ESI,[ESI + 8]    // Inc(PInteger(K), 2)
-      JNZ   @@1
-      ADD   EAX,[ESI + 0]    // Inc(A, K[0])
-      ADD   EDI,[ESI + 4]    // Inc(C, K[1])
-      POP   ECX
-      MOV   [ECX +  0],EAX   // A
-      MOV   [ECX +  4],EBX   // B
-      MOV   [ECX +  8],EDI   // C
-      MOV   [ECX + 12],EDX   // D
-      POP   EBP
-      POP   EDI
-      POP   ESI
-      POP   EBX
-end;
-{$ELSE}
-var
-  K: PLongArray;
-  I,T,U,A,B,C,D: LongWord;
-begin
-  Assert(Size = Context.BlockSize);
-
-  K := FUser;
-  A := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[0]{$ELSE}SwapLong(PLongArray(Source)[0]){$ENDIF};
-  B := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[1]{$ELSE}SwapLong(PLongArray(Source)[1]){$ENDIF} + K[0];
-  C := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[2]{$ELSE}SwapLong(PLongArray(Source)[2]){$ENDIF};
-  D := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[3]{$ELSE}SwapLong(PLongArray(Source)[3]){$ENDIF} + K[1];
-  for I := 1 to FRounds do
-  begin
-    K := @K[2];
-    T := B * (B + B +1);
-    T := T shl 5 or T shr 27;
-    U := D * (D + D +1);
-    U := U shl 5 or U shr 27;
-    A := A xor T;
-    A := A shl (U and 31) or A shr ((32 - U) and 31) + K[0];
-    C := C xor U;
-    C := C shl (T and 31) or C shr ((32 - T) and 31) + K[1];
-    T := A; A := B; B := C; C := D; D := T;
-  end;
-  PLongArray(Dest)[0] := A + K[2];
-  PLongArray(Dest)[1] := B;
-  PLongArray(Dest)[2] := C + K[3];
-  PLongArray(Dest)[3] := D;
-  {$IFDEF ENDIAN_BIG}
-  SwapLongBuffer(Dest^, Dest^, 4);
-  {$ENDIF}
-end;
-{$ENDIF}
-
-procedure TCipher_RC6.DoDecode(Source, Dest: Pointer; Size: Integer);
-{$IFDEF UseASM86}
-asm
-      PUSH  EBX
-      PUSH  ESI
-      PUSH  EDI
-      PUSH  EBP
-      PUSH  ECX
-      MOV   EBP,[EAX].TCipher_RC6.FRounds  // Rounds
-      MOV   ESI,[EAX].TCipher_RC6.FUser    // Key
-      LEA   ESI,[ESI + EBP * 8]            // Key[FRounds * 2]
-      MOV   EAX,[EDX +  0]   // A
-      MOV   EBX,[EDX +  4]   // B
-      MOV   EDI,[EDX +  8]   // C
-      MOV   EDX,[EDX + 12]   // D
-      SUB   EDI,[ESI + 12]   // Dec(C, K[3])
-      SUB   EAX,[ESI +  8]   // Dec(A, K[2])
-@@1:  MOV   ECX,EAX          // T := A
-      SUB   EDX,[ESI + 0]    // Dec(A, K[0])
-      MOV   EAX,EDX          // A := D
-      MOV   EDX,EDI          // D := C
-      SUB   EBX,[ESI + 4]    // Dec(C, K[1])
-      MOV   EDI,EBX          // C := B
-      MOV   EBX,ECX          // B := T;
-      LEA   ECX,[EDX * 2 +1] // ECX := D * 2 +1
-      IMUL  ECX,EDX          // ECX := ECX * D
-      ROL   ECX,5            // U := ROL(D * (D * 2 +1), 5)
-      PUSH  ECX              // save U
-      ROR   EAX,CL           // A := ROR(A - K[0], U)
-      LEA   ECX,[EBX * 2 +1] // ECX := B * 2 +1
-      IMUL  ECX,EBX          // ECX := ECX * B
-      ROL   ECX,5            // T := ROL(B * (B * 2 +1), 5)
-      XOR   EAX,ECX          // A := A xor T
-      ROR   EDI,CL           // C := ROR(C - K[1], T)
-      POP   ECX              // restore U
-      XOR   EDI,ECX          // C := C xor U
-      DEC   EBP
-      LEA   ESI,[ESI - 8]    // Dec(PInteger(K), 2)
-      JNZ   @@1
-      SUB   EBX,[ESI + 0]    // Dec(B, K[0])
-      SUB   EDX,[ESI + 4]    // Inc(D, K[1])
-      POP   ECX
-      MOV   [ECX +  0],EAX   // A
-      MOV   [ECX +  4],EBX   // B
-      MOV   [ECX +  8],EDI   // C
-      MOV   [ECX + 12],EDX   // D
-      POP   EBP
-      POP   EDI
-      POP   ESI
-      POP   EBX
-end;
-{$ELSE}
-var
-  I,U,T,A,B,C,D: LongWord;
-  K: PLongArray;
-begin
-  Assert(Size = Context.BlockSize);
-
-  K := @PLongArray(FUser)[FRounds * 2];
-  A := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[0]{$ELSE}SwapLong(PLongArray(Source)[0]){$ENDIF} - K[2];
-  B := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[1]{$ELSE}SwapLong(PLongArray(Source)[1]){$ENDIF};
-  C := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[2]{$ELSE}SwapLong(PLongArray(Source)[2]){$ENDIF} - K[3];
-  D := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[3]{$ELSE}SwapLong(PLongArray(Source)[3]){$ENDIF};
-  for I := 1 to FRounds do
-  begin
-    T := A; A := D; D := C; C := B; B := T;
-    U := D * (D + D +1);
-    U := U shl 5 or U shr 27;
-    T := B * (B + B +1);
-    T := T shl 5 or T shr 27;
-    C := C - K[1];
-    C := C shr (T and 31) or C shl ((32 - T) and 31) xor U;
-    A := A - K[0];
-    A := A shr (U and 31) or A shl ((32 - U) and 31) xor T;
-    Dec(PLongWord(K), 2);
-  end;
-  PLongArray(Dest)[0] := A;
-  PLongArray(Dest)[1] := B - K[0];
-  PLongArray(Dest)[2] := C;
-  PLongArray(Dest)[3] := D - K[1];
-  {$IFDEF ENDIAN_BIG}
-  SwapLongBuffer(Dest^, Dest^, 4);
-  {$ENDIF}
-end;
-{$ENDIF}
 
 // .TCipher_Rijndael
 const
@@ -5013,136 +4654,9 @@ begin
 end;
 {$IFDEF FPC}{$pop}{$ENDIF}
 
-procedure TCipher_Q128.DoEncode(Source, Dest: Pointer; Size: Integer);
-{$IFDEF UseASM86}
-asm
-       PUSH   ESI
-       PUSH   EDI
-       PUSH   EBX
-       PUSH   EBP
-       PUSH   ECX
-       MOV    EDI,[EAX].TCipher_Q128.FUser
-       MOV    EAX,[EDX +  0]  // B0
-       MOV    EBX,[EDX +  4]  // B1
-       MOV    ECX,[EDX +  8]  // B2
-       MOV    EDX,[EDX + 12]  // B3
-       MOV    EBP,16
-@@1:   MOV    ESI,EAX
-       ROL    ESI,10
-       AND    EAX,03FFh
-       MOV    EAX,[EAX * 4 + OFFSET Q128_DATA]
-       ADD    EAX,[EDI + 0]
-       XOR    EAX,EBX
-       MOV    EBX,EAX
-       ROL    EBX,10
-       AND    EAX,03FFh
-       MOV    EAX,[EAX * 4 + OFFSET Q128_DATA]
-       ADD    EAX,[EDI + 4]
-       XOR    EAX,ECX
-       MOV    ECX,EAX
-       ROL    ECX,10
-       AND    EAX,03FFh
-       MOV    EAX,[EAX * 4 + OFFSET Q128_DATA]
-       ADD    EAX,[EDI + 8]
-       XOR    EAX,EDX
-       MOV    EDX,EAX
-       ROL    EDX,10
-       AND    EAX,03FFh
-       MOV    EAX,[EAX * 4 + OFFSET Q128_DATA]
-       ADD    EAX,[EDI + 12]
-       XOR    EAX,ESI
-       DEC    EBP
-       LEA    EDI,[EDI + 16]
-       JNZ    @@1
-       POP    ESI
-       MOV    [ESI +  0],EAX  // B0
-       MOV    [ESI +  4],EBX  // B1
-       MOV    [ESI +  8],ECX  // B2
-       MOV    [ESI + 12],EDX  // B3
-       POP    EBP
-       POP    EBX
-       POP    EDI
-       POP    ESI
-end;
-{$ELSE}
-var
-  D: PLongArray;
-  B0,B1,B2,B3,I: LongWord;
-begin
-  Assert(Size = Context.BufferSize);
-
-  D  := FUser;
-  B0 := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[0]{$ELSE}SwapLong(PLongArray(Source)[0]){$ENDIF};
-  B1 := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[1]{$ELSE}SwapLong(PLongArray(Source)[1]){$ENDIF};
-  B2 := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[2]{$ELSE}SwapLong(PLongArray(Source)[2]){$ENDIF};
-  B3 := {$IFNDEF ENDIAN_BIG}PLongArray(Source)[3]{$ELSE}SwapLong(PLongArray(Source)[3]){$ENDIF};
-  for I := 0 to 15 do
-  begin
-    B1 := B1 xor (Q128_Data[B0 and $03FF] + D[0]); B0 := B0 shl 10 or B0 shr 22;
-    B2 := B2 xor (Q128_Data[B1 and $03FF] + D[1]); B1 := B1 shl 10 or B1 shr 22;
-    B3 := B3 xor (Q128_Data[B2 and $03FF] + D[2]); B2 := B2 shl 10 or B2 shr 22;
-    B0 := B0 xor (Q128_Data[B3 and $03FF] + D[3]); B3 := B3 shl 10 or B3 shr 22;
-    D := @D[4];
-  end;
-  PLongArray(Dest)[0] := {$IFNDEF ENDIAN_BIG}B0{$ELSE}SwapLong(B0){$ENDIF};
-  PLongArray(Dest)[1] := {$IFNDEF ENDIAN_BIG}B1{$ELSE}SwapLong(B1){$ENDIF};
-  PLongArray(Dest)[2] := {$IFNDEF ENDIAN_BIG}B2{$ELSE}SwapLong(B2){$ENDIF};
-  PLongArray(Dest)[3] := {$IFNDEF ENDIAN_BIG}B3{$ELSE}SwapLong(B3){$ENDIF};
-end;
-{$ENDIF}
 
 procedure TCipher_Q128.DoDecode(Source, Dest: Pointer; Size: Integer);
 {$IFDEF UseASM86}
-asm
-       PUSH   ESI
-       PUSH   EDI
-       PUSH   EBX
-       PUSH   EBP
-       PUSH   ECX
-       MOV    EDI,[EAX].TCipher_Q128.FUser
-       LEA    EDI,[EDI + 64 * 4]
-       MOV    ESI,[EDX +  0]   // B0
-       MOV    EBX,[EDX +  4]  // B1
-       MOV    ECX,[EDX +  8]  // B2
-       MOV    EDX,[EDX + 12]  // B3
-       MOV    EBP,16
-@@1:   SUB    EDI,16
-       ROR    EDX,10
-       MOV    EAX,EDX
-       AND    EAX,03FFh
-       MOV    EAX,[EAX * 4 + OFFSET Q128_DATA]
-       ADD    EAX,[EDI + 12]
-       XOR    ESI,EAX
-       ROR    ECX,10
-       MOV    EAX,ECX
-       AND    EAX,03FFh
-       MOV    EAX,[EAX * 4 + OFFSET Q128_DATA]
-       ADD    EAX,[EDI +  8]
-       XOR    EDX,EAX
-       ROR    EBX,10
-       MOV    EAX,EBX
-       AND    EAX,03FFh
-       MOV    EAX,[EAX * 4 + OFFSET Q128_DATA]
-       ADD    EAX,[EDI +  4]
-       XOR    ECX,EAX
-       ROR    ESI,10
-       MOV    EAX,ESI
-       AND    EAX,03FFh
-       MOV    EAX,[EAX * 4 + OFFSET Q128_DATA]
-       ADD    EAX,[EDI]
-       XOR    EBX,EAX
-       DEC    EBP
-       JNZ    @@1
-       POP    EAX
-       MOV    [EAX +  0],ESI  // B0
-       MOV    [EAX +  4],EBX  // B1
-       MOV    [EAX +  8],ECX  // B2
-       MOV    [EAX + 12],EDX  // B3
-       POP    EBP
-       POP    EBX
-       POP    EDI
-       POP    ESI
-end;
 {$ELSE}
 var
   D: PLongArray;
@@ -6385,5 +5899,8 @@ begin
   PLongArray(Dest)[0] := {$IFNDEF ENDIAN_BIG}X{$ELSE}SwapLong(X){$ENDIF};
   PLongArray(Dest)[1] := {$IFNDEF ENDIAN_BIG}Y{$ELSE}SwapLong(Y){$ENDIF};
 end;
+
+
+{$I DECCipher.inc}
 
 end.
