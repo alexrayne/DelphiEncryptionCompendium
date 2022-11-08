@@ -723,7 +723,10 @@ asm
 end;
 {$ELSE}
 begin
-  Result := Value shl 24 or Value shr 24 or Value shl 8 and $00FF0000 or Value shr 8 and $0000FF00;
+  Result := Value shl 24
+         or Value shr 24
+         or Value shl 8 and $00FF0000
+         or Value shr 8 and $0000FF00;
 end;
 {$ENDIF}
 
