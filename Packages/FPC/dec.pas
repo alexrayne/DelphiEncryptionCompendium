@@ -9,7 +9,7 @@ interface
 
 uses
   CPU, DECCipher, DECCRC, DECData, DECFmt, DECHash, DECRandom, DECUtil, 
-  LazarusPackageIntf;
+  DECccm, DECKW, LazarusPackageIntf;
 
 implementation
 

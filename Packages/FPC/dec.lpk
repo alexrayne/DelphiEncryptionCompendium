@@ -12,6 +12,16 @@
         <OtherUnitFiles Value="..\.."/>
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
+      <Parsing>
+        <SyntaxOptions>
+          <IncludeAssertionCode Value="True"/>
+        </SyntaxOptions>
+      </Parsing>
+      <Linking>
+        <Debugging>
+          <DebugInfoType Value="dsDwarf3"/>
+        </Debugging>
+      </Linking>
     </CompilerOptions>
     <Files>
       <Item>
@@ -53,6 +63,14 @@
       <Item>
         <Filename Value="..\..\Ver.inc"/>
         <Type Value="Include"/>
+      </Item>
+      <Item>
+        <Filename Value="..\..\decccm.pas"/>
+        <UnitName Value="DECccm"/>
+      </Item>
+      <Item>
+        <Filename Value="..\..\deckw.pas"/>
+        <UnitName Value="DECKW"/>
       </Item>
     </Files>
     <RequiredPkgs>
