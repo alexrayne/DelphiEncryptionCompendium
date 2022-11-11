@@ -48,6 +48,14 @@ type
   PLongArray     = ^TLongArray;
   TLongArray     = array[0..1023] of LongWord;
 
+  TKey128        = record
+     case integer of
+     0: ( b : array[0..15] of byte );
+     1: ( l : array[0..3] of LongWord );
+     2: ( q : array[0..1] of QWord );
+  end;
+  PKey128       = ^TKey128;
+
   // DEC exception class which all DEC-Classes/methods should use
   EDECException  = class(Exception);
 
