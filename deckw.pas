@@ -22,12 +22,12 @@ type
   public
     // @arg dest - output buffer, MUST have space DataSize+8
     // @return dest size
-    function wrap  (const Source; DataSize: word; var Dest ): word;
+    function wrap  (const Source; DataSize: LongWord; var Dest ): word;
 
     // @arg dest - output buffer, MUST have space DataSize-8
     // @return dest size
     // @return 0 - unwraped no key
-    function unwrap(const Source; DataSize: word; var Dest ): word;
+    function unwrap(const Source; DataSize: LongWord; var Dest ): word;
 
     const ICV1 : qword = $a6a6a6a6a6a6a6a6;
   end;
@@ -39,10 +39,10 @@ resourcestring
   sKWSizeInvalid = 'KW-size should have 8byte*(n >= 3)';
 
 
-function TDEC_KW.wrap  (const Source; DataSize: word; var Dest): word;
+function TDEC_KW.wrap  (const Source; DataSize: LongWord; var Dest): word;
 var
-    n : word;
-    i : word;
+    n : LongWord;
+    i : LongWord;
     j : byte;
     t : qword;
     A : qword;
@@ -92,10 +92,10 @@ begin
     result := DataSize+8;
 end;
 
-function TDEC_KW.unwrap(const Source; DataSize: word; var Dest) : word;
+function TDEC_KW.unwrap(const Source; DataSize: LongWord; var Dest) : word;
 var
-    n : word;
-    i : word;
+    n : LongWord;
+    i : LongWord;
     j : byte;
     t : qword;
     A : qword;
@@ -126,7 +126,7 @@ begin
     s := PByteArray(@source);
     d := PByteArray(@dest);
     move(s[0], ba[0], 8);
-    move(s[8], d[0], DataSize);
+    move(s[8], d[0], DataSize-8);
 
     for j := 5 downto 0 do begin
       t := n*j;
